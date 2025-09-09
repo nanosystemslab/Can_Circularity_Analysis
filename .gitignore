@@ -67,8 +67,5 @@ poetry.lock
 # mypy
 .mypy_cache/
 
-# Pre-commit
-.pre-commit-config.yaml
-
-# Python version file
+# Python version file (can vary by developer)
 .python-version
