@@ -1,0 +1,70 @@
+[tool.poetry]
+name = "can_circularity_analysis"
+version = "0.1.0"
+description = "Computer vision tool for analyzing can circularity and rim quality"
+authors = ["Your Name <your.email@example.com>"]
+license = "GPL-3.0-or-later"
+readme = "README.md"
+packages = [{ include = "can_circularity_analysis", from = "src" }]
+homepage = "https://github.com/yourusername/can_circularity_analysis"
+repository = "https://github.com/yourusername/can_circularity_analysis"
+keywords = ["computer-vision", "quality-control", "image-analysis", "manufacturing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Manufacturing",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Topic :: Scientific/Engineering :: Quality Control",
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+opencv-python = "^4.8.0"
+scikit-image = "^0.21.0"
+numpy = "^1.24.0"
+pandas = "^2.0.0"
+matplotlib = "^3.7.0"
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = "^4.0.1"
+ruff = "^0.6.9"
+mypy = "^1.11.1"
+pytest = "^8.3.2"
+pytest-cov = "^4.1.0"
+
+[tool.poetry.scripts]
+can-analyze = "can_circularity_analysis.cli.analyze:main"
+can-summarize = "can_circularity_analysis.cli.summarize:main"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+lint.select = ["E","F","I","UP","B","C4","TID","W"]
+lint.ignore = []
+exclude = ["build","dist",".venv"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["can_circularity_analysis"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["can_circularity_analysis"]
+check_untyped_defs = true
+disallow_untyped_defs = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-q --cov=can_circularity_analysis"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
