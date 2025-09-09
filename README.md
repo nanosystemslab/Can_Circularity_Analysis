@@ -859,7 +859,7 @@ If you use this software in your research or industrial applications, please cit
 ```bibtex
 @software{can_circularity_analysis,
   title={Can Circularity Analysis: Computer Vision for Manufacturing Quality Control},
-  author={Nakamura, Matt and Nanosystems Lab},
+  author={Nanosystems Lab},
   year={2025},
   url={https://github.com/nanosystemslab/Can_Circularity_Analysis},
   version={0.1.0}
