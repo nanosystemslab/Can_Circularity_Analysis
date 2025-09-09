@@ -1,460 +1,338 @@
 """CLI for summarizing can analysis results and generating plots."""
 
 import argparse
+import json
 import sys
 from pathlib import Path
-from typing import List, Dict, Any
 
 try:
-    import pandas as pd
-    import numpy as np
     import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
+
     PLOTTING_AVAILABLE = True
 except ImportError:
     PLOTTING_AVAILABLE = False
 
-from ..utils.file_io import find_metrics_files, load_metrics_json, create_output_directory
 
-
-def create_argument_parser() -> argparse.ArgumentParser:
+def create_argument_parser():
     """Create argument parser for the summarize command."""
     parser = argparse.ArgumentParser(
-        description="Summarize can analysis results and generate comparison plots.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Basic summary of results
-  can-summarize --in-dir results
-
-  # Generate summary with plots
-  can-summarize --in-dir results --make-plots
-
-  # Group by filename prefix (first 3 characters)
-  can-summarize --in-dir results --prefix-len 3
-
-  # Create plots with legends
-  can-summarize --in-dir results --make-plots --legend --legend-limit 5
-        """
-    )
-    
-    # Input/Output
-    parser.add_argument(
-        "--in-dir", 
-        default="out", 
-        help="Directory containing *_metrics.json files (default: ./out)"
+        description="Summarize can analysis results and generate plots."
     )
     parser.add_argument(
-        "--pattern", 
-        default="*_metrics.json",
-        help="Glob pattern for metrics files (default: *_metrics.json)"
+        "--in-dir", default="out", help="Directory containing *_metrics.json files (default: ./out)"
     )
     parser.add_argument(
-        "--out-dir", 
-        default="out", 
-        help="Output directory for summaries and plots (default: ./out)"
+        "--out-dir", default="out", help="Output directory for summaries and plots (default: ./out)"
     )
-    
-    # Grouping options
-    group_args = parser.add_argument_group("Grouping Options")
-    group_args.add_argument(
-        "--prefix-len", 
-        type=int, 
-        default=0,
-        help="If >0, also group stats by filename prefix of this length"
+    parser.add_argument(
+        "--make-plots", action="store_true", help="Generate overlay plots and histograms"
     )
-    
-    # Plotting options
-    plot_args = parser.add_argument_group("Plotting Options")
-    plot_args.add_argument(
-        "--make-plots", 
-        action="store_true",
-        help="Generate overlay plots and histograms"
-    )
-    plot_args.add_argument(
-        "--polar-mm", 
-        action="store_true",
-        help="Use mm units for polar deviation plots (requires calibrated data)"
-    )
-    plot_args.add_argument(
-        "--max-points-per", 
-        type=int, 
-        default=400,
-        help="Maximum points per rim in overlay plots (default: 400)"
-    )
-    
-    # Legend options
-    legend_args = parser.add_argument_group("Legend Options")
-    legend_args.add_argument(
-        "--legend", 
-        action="store_true",
-        help="Add legends to overlay plots (may cause clutter with many files)"
-    )
-    legend_args.add_argument(
-        "--legend-limit", 
-        type=int, 
-        default=10,
-        help="Maximum number of entries to show in legends (default: 10)"
-    )
-    legend_args.add_argument(
-        "--legend-by-parent", 
-        action="store_true",
-        help="Use parent directory names in legends instead of filenames"
-    )
-    
     return parser
 
 
-def read_metrics_file(file_path: Path) -> Dict[str, Any]:
-    """Read and flatten a single metrics JSON file."""
-    try:
-        data = load_metrics_json(file_path)
-    except Exception as e:
-        return {"_read_error": str(e), "_file": str(file_path)}
-    
-    row = {"_file": str(file_path)}
-    
-    # Flatten basic fields
-    for key, value in data.items():
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            row[key] = value
-    
-    # Flatten center coordinates
-    if isinstance(data.get("center_px"), (list, tuple)) and len(data["center_px"]) == 2:
-        row["center_px_x"], row["center_px_y"] = data["center_px"]
-    if isinstance(data.get("center_mm"), (list, tuple)) and len(data["center_mm"]) == 2:
-        row["center_mm_x"], row["center_mm_y"] = data["center_mm"]
-    
-    # Flatten ellipse data
-    ellipse = data.get("ellipse")
-    if isinstance(ellipse, dict):
-        for key, value in ellipse.items():
-            if isinstance(value, (str, int, float, bool)) or value is None:
-                row[f"ellipse_{key}"] = value
-            elif isinstance(value, (list, tuple)) and len(value) == 2:
-                row[f"ellipse_{key}_x"] = value[0]
-                row[f"ellipse_{key}_y"] = value[1]
-    
-    # Add derived fields
-    if "image_path" in data:
-        img_path = Path(data["image_path"])
-        row["_image_name"] = img_path.name
-        row["_parent_dir"] = img_path.parent.name
-        row["_stem"] = img_path.stem
-    
-    # Success flag
-    row["_ok"] = (row.get("overlay_image") is not None) and (row.get("_read_error") is None)
-    
-    return row
-
-
-def summarize_numeric_data(df, group_by=None):
-    """Generate summary statistics for numeric columns."""
-    if not PLOTTING_AVAILABLE:
-        return None
-        
-    numeric_cols = df.select_dtypes(include=[np.number])
-    if numeric_cols.empty:
-        return pd.DataFrame()
-    
-    if group_by is None:
-        return numeric_cols.describe().T
-    
-    if group_by not in df.columns:
-        return numeric_cols.describe().T
-        
-    grouped_stats = []
-    for name, group in df.groupby(group_by):
-        stats = group.select_dtypes(include=[np.number]).describe().T
-        stats.insert(0, group_by, name)
-        grouped_stats.append(stats)
-    
-    if grouped_stats:
-        result = pd.concat(grouped_stats, axis=0)
-        result.reset_index(names=["metric"], inplace=True)
-        return result
-    else:
-        return pd.DataFrame()
-
-
-def generate_plots(cases: List[Dict], plots_dir: Path, args) -> None:
-    """Generate all visualization plots."""
-    if not PLOTTING_AVAILABLE:
-        print("Warning: Plotting libraries not available. Install pandas and matplotlib for plots.")
-        return
-    
-    # Import plotting functions (simplified versions of the original)
-    try:
-        # Histograms
-        _create_histograms(cases, plots_dir)
-        
-        # Overlay plots  
-        _create_overlay_plots(cases, plots_dir, args)
-        
-        # Polar deviation plot
-        _create_polar_plot(cases, plots_dir, args)
-        
-        print(f"Plots saved to: {plots_dir}")
-        
-    except Exception as e:
-        print(f"Error generating plots: {e}")
-
-
-def _create_histograms(cases: List[Dict], plots_dir: Path) -> None:
-    """Create histogram plots for key metrics."""
-    metrics = {
-        'diameter_mm': [c.get('diameter_mm') for c in cases if c.get('diameter_mm')],
-        'rms_out_of_round_mm': [c.get('rms_out_of_round_mm') for c in cases if c.get('rms_out_of_round_mm')],
-        'circularity': [c.get('circularity_4piA_P2') for c in cases if c.get('circularity_4piA_P2')]
-    }
-    
-    for metric_name, values in metrics.items():
-        if len(values) > 0:
-            plt.figure(figsize=(8, 6))
-            plt.hist(values, bins=min(20, len(values)), alpha=0.7, edgecolor='black')
-            plt.xlabel(metric_name.replace('_', ' ').title())
-            plt.ylabel('Count')
-            plt.title(f'Distribution of {metric_name.replace("_", " ").title()}')
-            plt.grid(True, alpha=0.3)
-            
-            # Add statistics text
-            if len(values) > 1:
-                mean_val = np.mean(values)
-                std_val = np.std(values)
-                plt.axvline(mean_val, color='red', linestyle='--', label=f'Mean: {mean_val:.3f}')
-                plt.legend()
-            
-            plt.tight_layout()
-            plt.savefig(plots_dir / f'hist_{metric_name}.png', dpi=150, bbox_inches='tight')
-            plt.close()
-
-
-def _create_overlay_plots(cases: List[Dict], plots_dir: Path, args) -> None:
-    """Create overlay plots for rims and circles."""
-    if not cases:
-        return
-        
-    # Simple rim overlay (would need to load actual point data for full implementation)
-    plt.figure(figsize=(10, 10))
-    
-    # Draw unit circle as reference
-    theta = np.linspace(0, 2*np.pi, 100)
-    plt.plot(np.cos(theta), np.sin(theta), 'k--', alpha=0.5, label='Perfect Circle')
-    
-    # For now, just show that we'd overlay the actual rim data here
-    # In full implementation, would load CSV files and plot normalized points
-    plt.title('Rim Overlay (Normalized)')
-    plt.xlabel('x / r_fit')
-    plt.ylabel('y / r_fit')
-    plt.axis('equal')
-    plt.grid(True, alpha=0.3)
-    plt.legend()
-    
-    plt.tight_layout()
-    plt.savefig(plots_dir / 'overlay_rims.png', dpi=150, bbox_inches='tight')
-    plt.close()
-
-
-def _create_polar_plot(cases: List[Dict], plots_dir: Path, args) -> None:
-    """Create polar deviation plot."""
-    # This would require loading actual point data from CSV files
-    # For now, create a placeholder
-    plt.figure(figsize=(12, 8))
-    
-    # Simulate some polar deviation data
-    theta_sim = np.linspace(-180, 180, 360)
-    
-    for i, case in enumerate(cases[:min(5, len(cases))]):  # Limit to first 5 for visibility
-        # Simulate deviation data (in real implementation, load from CSV)
-        deviation_sim = 0.1 * np.sin(3 * np.deg2rad(theta_sim)) + 0.05 * np.random.randn(len(theta_sim))
-        
-        label = case.get('_stem', f'Case {i+1}')
-        if args.legend and i < args.legend_limit:
-            plt.plot(theta_sim, deviation_sim, alpha=0.7, label=label)
-        else:
-            plt.plot(theta_sim, deviation_sim, alpha=0.7)
-    
-    plt.xlabel('Angle (degrees)')
-    plt.ylabel('Radial Deviation (mm)' if args.polar_mm else 'Radial Deviation (px)')
-    plt.title('Radial Deviation vs Angle')
-    plt.grid(True, alpha=0.3)
-    
-    if args.legend:
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-    
-    plt.tight_layout()
-    output_name = 'polar_deviation_mm.png' if args.polar_mm else 'polar_deviation_px.png'
-    plt.savefig(plots_dir / output_name, dpi=150, bbox_inches='tight')
-    plt.close()
-
-
-def load_case_data(metrics_files: List[Path]) -> List[Dict]:
-    """Load case data for plotting."""
+def load_case_data(metrics_files):
+    """Load actual rim data from metrics and CSV files."""
     cases = []
-    
-    for file_path in metrics_files:
+
+    for metrics_file in metrics_files:
         try:
-            data = load_metrics_json(file_path)
-            
-            # Extract key information for plotting
+            # Load metrics
+            with open(metrics_file) as f:
+                metrics = json.load(f)
+
+            # Find corresponding CSV file
+            csv_path = metrics.get("csv_points")
+            if not csv_path or not Path(csv_path).exists():
+                # Try to construct CSV path from metrics file name
+                csv_path = str(metrics_file).replace("_metrics.json", "_points.csv")
+
+            if not Path(csv_path).exists():
+                print(f"Warning: CSV file not found for {metrics_file}")
+                continue
+
+            # Load rim points
+            df = pd.read_csv(csv_path)
+
+            if df.empty:
+                print(f"Warning: Empty CSV file {csv_path}")
+                continue
+
+            # Extract center and radius from metrics
+            center_px = metrics.get("center_px", [0, 0])
+            radius_px = metrics.get("radius_px", 1)
+
+            # Get rim points relative to center
+            x_pts = df["x_px"].values - center_px[0]
+            y_pts = df["y_px"].values - center_px[1]
+
+            # Normalize by radius
+            x_norm = x_pts / radius_px
+            y_norm = y_pts / radius_px
+
             case = {
-                '_file': str(file_path),
-                '_stem': file_path.stem.replace('_metrics', ''),
-                '_parent_dir': file_path.parent.name,
-                'diameter_mm': data.get('diameter_mm'),
-                'diameter_px': data.get('diameter_px'), 
-                'radius_px': data.get('radius_px'),
-                'center_px': data.get('center_px'),
-                'rms_out_of_round_mm': data.get('rms_out_of_round_mm'),
-                'rms_out_of_round_px': data.get('rms_out_of_round_px'),
-                'circularity_4piA_P2': data.get('circularity_4piA_P2'),
-                'csv_points': data.get('csv_points'),
-                'has_mm': data.get('pixels_per_mm') is not None,
-                'ellipse': data.get('ellipse')
+                "name": Path(metrics_file).stem.replace("_metrics", ""),
+                "x_norm": x_norm,
+                "y_norm": y_norm,
+                "diameter_mm": metrics.get("diameter_mm"),
+                "diameter_px": metrics.get("diameter_px"),
+                "circularity": metrics.get("circularity_4piA_P2"),
+                "rms_mm": metrics.get("rms_out_of_round_mm"),
+                "rms_px": metrics.get("rms_out_of_round_px"),
+                "std_mm": metrics.get("std_out_of_round_mm"),
+                "range_mm": metrics.get("range_out_of_round_mm"),
             }
             cases.append(case)
-            
+
         except Exception as e:
-            print(f"Warning: Could not load {file_path}: {e}")
+            print(f"Error loading {metrics_file}: {e}")
             continue
-    
+
     return cases
+
+
+def create_rim_overlay_plot(cases, output_path):
+    """Create overlay plot with actual rim data."""
+    plt.figure(figsize=(14, 10))  # Made slightly wider to accommodate legend
+
+    # Plot perfect circle reference
+    theta = np.linspace(0, 2 * np.pi, 100)
+    plt.plot(np.cos(theta), np.sin(theta), "k--", alpha=0.8, linewidth=2, label="Perfect Circle")
+
+    # Plot actual rim data
+    colors = plt.cm.tab10(np.linspace(0, 1, min(len(cases), 10)))
+
+    # Always label up to 12 cases for legend
+    max_legend_items = 32
+
+    for i, case in enumerate(cases):
+        color = colors[i % len(colors)]
+        alpha = 0.7 if len(cases) <= 5 else 0.5
+        size = 2 if len(cases) <= 5 else 1
+
+        # Show label for first max_legend_items cases
+        label = case["name"] if i < max_legend_items else ""
+
+        plt.scatter(case["x_norm"], case["y_norm"], c=[color], alpha=alpha, s=size, label=label)
+
+    plt.axis("equal")
+    plt.grid(True, alpha=0.3)
+    plt.xlabel("x / r_fit")
+    plt.ylabel("y / r_fit")
+    plt.title(f"Rim Overlay (Normalized) - {len(cases)} samples")
+
+    # Always show legend, but adjust based on number of cases
+    if len(cases) > max_legend_items:
+        # Add a note about additional unlabeled cases
+        plt.figtext(
+            0.02,
+            0.02,
+            (f"Note: Showing first {max_legend_items} labels. "
+             f"{len(cases) - max_legend_items} additional cases unlabeled."),
+            fontsize=8,
+            style="italic",
+        )
+
+    # Position legend outside plot area
+    plt.legend(loc="center left", bbox_to_anchor=(1, 0.5), fontsize="small")
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Created: {output_path}")
+
+
+def create_histogram_plots(cases, plots_dir):
+    """Create histogram plots for key metrics."""
+    # Diameter histogram
+    diameters = [c["diameter_mm"] for c in cases if c["diameter_mm"] is not None]
+    if diameters:
+        plt.figure(figsize=(8, 6))
+        plt.hist(diameters, bins=min(15, len(diameters)), alpha=0.7, edgecolor="black")
+        plt.xlabel("Diameter (mm)")
+        plt.ylabel("Count")
+        plt.title(f"Diameter Distribution (n={len(diameters)})")
+        plt.grid(True, alpha=0.3)
+
+        # Add statistics text
+        mean_d = np.mean(diameters)
+        std_d = np.std(diameters)
+        plt.axvline(mean_d, color="red", linestyle="--", alpha=0.8)
+        plt.text(
+            0.02,
+            0.98,
+            (f"Mean: {mean_d:.2f}±{std_d:.2f} mm\n"
+             f"Range: {min(diameters):.2f}-{max(diameters):.2f} mm"),
+            transform=plt.gca().transAxes,
+            verticalalignment="top",
+            bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
+        )
+
+        plt.tight_layout()
+        plt.savefig(plots_dir / "diameter_histogram.png", dpi=150, bbox_inches="tight")
+        plt.close()
+        print("  Created: diameter_histogram.png")
+
+    # RMS out-of-round histogram
+    rms_values = [c["rms_mm"] for c in cases if c["rms_mm"] is not None]
+    if rms_values:
+        plt.figure(figsize=(8, 6))
+        plt.hist(
+            rms_values, bins=min(15, len(rms_values)), alpha=0.7, edgecolor="black", color="orange"
+        )
+        plt.xlabel("RMS Out-of-Round (mm)")
+        plt.ylabel("Count")
+        plt.title(f"Out-of-Round Distribution (n={len(rms_values)})")
+        plt.grid(True, alpha=0.3)
+
+        # Add statistics text
+        mean_rms = np.mean(rms_values)
+        std_rms = np.std(rms_values)
+        plt.axvline(mean_rms, color="red", linestyle="--", alpha=0.8)
+        plt.text(
+            0.02,
+            0.98,
+            f"Mean: {mean_rms:.3f}±{std_rms:.3f} mm\nRange: {min(rms_values):.3f}-{max(rms_values):.3f} mm",
+            transform=plt.gca().transAxes,
+            verticalalignment="top",
+            bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
+        )
+
+        plt.tight_layout()
+        plt.savefig(plots_dir / "rms_histogram.png", dpi=150, bbox_inches="tight")
+        plt.close()
+        print("  Created: rms_histogram.png")
+
+    # Circularity histogram
+    circularities = [c["circularity"] for c in cases if c["circularity"] is not None]
+    if circularities:
+        plt.figure(figsize=(8, 6))
+        plt.hist(
+            circularities,
+            bins=min(15, len(circularities)),
+            alpha=0.7,
+            edgecolor="black",
+            color="green",
+        )
+        plt.xlabel("Circularity (4πA/P²)")
+        plt.ylabel("Count")
+        plt.title(f"Circularity Distribution (n={len(circularities)})")
+        plt.grid(True, alpha=0.3)
+
+        # Add statistics and ideal line
+        mean_circ = np.mean(circularities)
+        std_circ = np.std(circularities)
+        plt.axvline(1.0, color="blue", linestyle="--", alpha=0.8, label="Perfect Circle")
+        plt.axvline(mean_circ, color="red", linestyle="--", alpha=0.8, label="Mean")
+        plt.text(
+            0.02,
+            0.98,
+            f"Mean: {mean_circ:.3f}±{std_circ:.3f}\nRange: {min(circularities):.3f}-{max(circularities):.3f}",
+            transform=plt.gca().transAxes,
+            verticalalignment="top",
+            bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
+        )
+        plt.legend()
+
+        plt.tight_layout()
+        plt.savefig(plots_dir / "circularity_histogram.png", dpi=150, bbox_inches="tight")
+        plt.close()
+        print("  Created: circularity_histogram.png")
+
+
+def print_summary_stats(cases):
+    """Print summary statistics to console."""
+    if not cases:
+        print("No data to summarize")
+        return
+
+    print(f"\nSummary Statistics (n={len(cases)} samples):")
+    print("=" * 50)
+
+    # Diameter stats
+    diameters = [c["diameter_mm"] for c in cases if c["diameter_mm"] is not None]
+    if diameters:
+        print("Diameter (mm):")
+        print(f"  Mean: {np.mean(diameters):.2f} ± {np.std(diameters):.2f}")
+        print(f"  Range: {np.min(diameters):.2f} - {np.max(diameters):.2f}")
+        print(f"  Median: {np.median(diameters):.2f}")
+
+    # Circularity stats
+    circularities = [c["circularity"] for c in cases if c["circularity"] is not None]
+    if circularities:
+        print("\nCircularity (4πA/P²):")
+        print(f"  Mean: {np.mean(circularities):.3f} ± {np.std(circularities):.3f}")
+        print(f"  Range: {np.min(circularities):.3f} - {np.max(circularities):.3f}")
+        print(f"  Median: {np.median(circularities):.3f}")
+
+    # Out-of-round stats
+    rms_values = [c["rms_mm"] for c in cases if c["rms_mm"] is not None]
+    if rms_values:
+        print("\nRMS Out-of-Round (mm):")
+        print(f"  Mean: {np.mean(rms_values):.3f} ± {np.std(rms_values):.3f}")
+        print(f"  Range: {np.min(rms_values):.3f} - {np.max(rms_values):.3f}")
+        print(f"  Median: {np.median(rms_values):.3f}")
 
 
 def main():
     """Main entry point for the summarize command."""
     parser = create_argument_parser()
     args = parser.parse_args()
-    
+
     # Check if input directory exists
     in_dir = Path(args.in_dir)
     if not in_dir.exists():
         print(f"Error: Input directory '{args.in_dir}' does not exist")
         sys.exit(1)
-    
+
     # Find metrics files
-    metrics_files = find_metrics_files(args.in_dir, args.pattern)
+    metrics_files = list(in_dir.glob("*_metrics.json"))
     if not metrics_files:
-        print(f"Warning: No files matching '{args.pattern}' found in '{args.in_dir}'")
+        print(f"No *_metrics.json files found in '{args.in_dir}'")
         return
-    
-    print(f"Found {len(metrics_files)} metrics files")
-    
-    # Create output directory
-    out_dir = Path(args.out_dir)
-    create_output_directory(str(out_dir))
-    
-    # Process files into tabular format
+
+    print(f"Found {len(metrics_files)} metrics files in {in_dir}")
+
     if not PLOTTING_AVAILABLE:
-        print("Warning: pandas not available. Install pandas for CSV summaries.")
-        rows = [read_metrics_file(f) for f in metrics_files]
-        
-        # Simple summary without pandas
-        total = len(rows)
-        successful = len([r for r in rows if r.get('_ok', False)])
-        failed = total - successful
-        
-        print(f"\nSummary:")
-        print(f"  Total files: {total}")
-        print(f"  Successfully processed: {successful}")
-        print(f"  Failed: {failed}")
-        
-        # Save simple JSON summary
-        import json
-        summary = {
-            'total_files': total,
-            'successful': successful,
-            'failed': failed,
-            'details': rows
-        }
-        
-        summary_path = out_dir / 'summary.json'
-        with open(summary_path, 'w') as f:
-            json.dump(summary, f, indent=2)
-        print(f"Summary saved to: {summary_path}")
-        
-    else:
-        # Full pandas-based analysis
-        rows = [read_metrics_file(f) for f in metrics_files]
-        df = pd.DataFrame(rows)
-        
-        # Convert numeric columns
-        for col in df.columns:
-            if not col.startswith('_'):
-                df[col] = pd.to_numeric(df[col], errors='ignore')
-        
-        # Add derived columns
-        if 'diameter_mm' not in df.columns and 'radius_mm' in df.columns:
-            df['diameter_mm'] = df['radius_mm'] * 2.0
-        
-        # Save master table
-        all_csv = out_dir / 'metrics_all.csv'
-        df.to_csv(all_csv, index=False)
-        print(f"All metrics saved to: {all_csv}")
-        
-        # Overall statistics
-        stats_overall = summarize_numeric_data(df)
-        if not stats_overall.empty:
-            stats_csv = out_dir / 'stats_overall.csv'
-            stats_overall.to_csv(stats_csv)
-            print(f"Overall statistics saved to: {stats_csv}")
-        
-        # Group by parent directory
-        if '_parent_dir' in df.columns and df['_parent_dir'].nunique() > 1:
-            stats_by_parent = summarize_numeric_data(df, group_by='_parent_dir')
-            if not stats_by_parent.empty:
-                parent_csv = out_dir / 'stats_by_parent.csv'
-                stats_by_parent.to_csv(parent_csv, index=False)
-                print(f"Statistics by parent directory saved to: {parent_csv}")
-        
-        # Group by filename prefix
-        if args.prefix_len > 0 and '_stem' in df.columns:
-            df['_prefix'] = df['_stem'].str.slice(0, args.prefix_len)
-            stats_by_prefix = summarize_numeric_data(df, group_by='_prefix')
-            if not stats_by_prefix.empty:
-                prefix_csv = out_dir / 'stats_by_prefix.csv'
-                stats_by_prefix.to_csv(prefix_csv, index=False)
-                print(f"Statistics by prefix saved to: {prefix_csv}")
-        
-        # Print summary
-        total = len(df)
-        successful = int(df['_ok'].sum()) if '_ok' in df.columns else total
-        failed = total - successful
-        
-        print(f"\nSummary:")
-        print(f"  Total files: {total}")
-        print(f"  Successfully processed: {successful}")
-        print(f"  Failed: {failed}")
-        
-        # Show some key statistics
-        if successful > 0:
-            numeric_cols = ['diameter_mm', 'circularity_4piA_P2', 'rms_out_of_round_mm']
-            available_cols = [col for col in numeric_cols if col in df.columns]
-            
-            if available_cols:
-                print(f"\nKey Statistics:")
-                for col in available_cols:
-                    valid_data = df[col].dropna()
-                    if len(valid_data) > 0:
-                        print(f"  {col}: {valid_data.mean():.3f} ± {valid_data.std():.3f} "
-                              f"(range: {valid_data.min():.3f} - {valid_data.max():.3f})")
-    
+        print(
+            "Warning: pandas/matplotlib not available. Install with: pip install pandas matplotlib"
+        )
+        return
+
+    # Load actual data
+    print("Loading rim data from CSV files...")
+    cases = load_case_data(metrics_files)
+
+    if not cases:
+        print("Error: No valid data could be loaded from CSV files")
+        return
+
+    print(f"Successfully loaded {len(cases)} cases with rim data")
+
+    # Print summary statistics
+    print_summary_stats(cases)
+
     # Generate plots if requested
     if args.make_plots:
-        if not PLOTTING_AVAILABLE:
-            print("Error: Cannot generate plots. Install pandas and matplotlib:")
-            print("  pip install pandas matplotlib")
-            sys.exit(1)
-        
-        plots_dir = out_dir / 'plots'
-        plots_dir.mkdir(exist_ok=True)
-        
-        # Load case data for plotting
-        cases = load_case_data(metrics_files)
-        
-        if cases:
-            generate_plots(cases, plots_dir, args)
-        else:
-            print("Warning: No valid case data found for plotting")
+        print("\nGenerating plots...")
+        plots_dir = Path(args.out_dir) / "plots"
+        plots_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create rim overlay plot
+        create_rim_overlay_plot(cases, plots_dir / "rim_overlay.png")
+
+        # Create histogram plots
+        create_histogram_plots(cases, plots_dir)
+
+        print(f"\nAll plots saved to: {plots_dir}")
+        print("\nGenerated files:")
+        print("  - rim_overlay.png (normalized rim shapes)")
+        print("  - diameter_histogram.png")
+        print("  - rms_histogram.png")
+        print("  - circularity_histogram.png")
+    else:
+        print("\nUse --make-plots to generate visualization plots")
 
 
 if __name__ == "__main__":

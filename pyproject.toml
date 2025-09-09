@@ -38,7 +38,7 @@ can-summarize = "can_circularity_analysis.cli.summarize:main"
 
 [tool.ruff]
 target-version = "py311"
-line-length = 100
+line-length = 120
 lint.select = ["E","F","I","UP","B","C4","TID","W"]
 lint.ignore = []
 exclude = ["build","dist",".venv"]
