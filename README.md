@@ -7,3 +7,5 @@ Minimal Poetry + Ruff (and optional mypy) project.
 poetry install
 poetry run pre-commit install
 poetry run pytest
+
+updating
