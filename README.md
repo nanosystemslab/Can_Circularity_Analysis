@@ -54,7 +54,7 @@ Additional dependencies for 3D reconstruction:
 
 ---
 
-# Section 1: Can Analysis
+# Can Analysis
 
 The analysis component provides automated rim detection and circularity measurement for individual images or batch processing.
 
@@ -239,7 +239,7 @@ Summary of all analyses when processing multiple images
 
 ---
 
-# Section 2: Can Summary
+# Can Summary
 
 The summary component generates statistical reports and visualizations from analysis results.
 
@@ -325,7 +325,7 @@ poetry run can-summarize \
 
 ---
 
-# Section 3: Can Reconstruction
+# Can Reconstruction
 
 The reconstruction component creates 3D mesh models from top and bottom rim analyses for visualization, simulation, or manufacturing applications.
 
