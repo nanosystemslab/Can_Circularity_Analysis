@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "can_circularity_analysis"
-version = "0.1.0"
+version = "0.2.0"  # 🔄 UPDATED for new feature
 description = "Computer vision tool for analyzing can circularity and rim quality"
 authors = ["Your Name <your.email@example.com>"]
 license = "GPL-3.0-or-later"
@@ -8,7 +8,7 @@ readme = "README.md"
 packages = [{ include = "can_circularity_analysis", from = "src" }]
 homepage = "https://github.com/yourusername/can_circularity_analysis"
 repository = "https://github.com/yourusername/can_circularity_analysis"
-keywords = ["computer-vision", "quality-control", "image-analysis", "manufacturing"]
+keywords = ["computer-vision", "quality-control", "image-analysis", "manufacturing", "3d-reconstruction"]  # 🔄 UPDATED
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Manufacturing",
@@ -24,6 +24,8 @@ scikit-image = "^0.21.0"
 numpy = "^1.24.0"
 pandas = "^2.0.0"
 matplotlib = "^3.7.0"
+trimesh = "^4.8.1"
+scipy = "^1.16.1"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^4.0.1"
@@ -32,9 +34,15 @@ mypy = "^1.11.1"
 pytest = "^8.3.2"
 pytest-cov = "^4.1.0"
 
+# Poetry extras for optional features
+[tool.poetry.extras]
+reconstruction = ["trimesh", "scipy"]
+all = ["trimesh", "scipy"]
+
 [tool.poetry.scripts]
 can-analyze = "can_circularity_analysis.cli.analyze:main"
 can-summarize = "can_circularity_analysis.cli.summarize:main"
+can-reconstruct = "can_circularity_analysis.cli.reconstruct:main"  # 🆕 NEW
 
 [tool.ruff]
 target-version = "py311"

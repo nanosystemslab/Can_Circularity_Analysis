@@ -64,9 +64,7 @@ def calibrate_pixels_per_mm(
     return pixels_per_mm, (float(p1[0]), float(p1[1]), float(p2[0]), float(p2[1]))
 
 
-def calibrate_from_points(
-    scale_points: str, known_mm: float
-) -> tuple[float, tuple[float, float, float, float]]:
+def calibrate_from_points(scale_points: str, known_mm: float) -> tuple[float, tuple[float, float, float, float]]:
     """Non-GUI calibration from coordinate string.
 
     Args:

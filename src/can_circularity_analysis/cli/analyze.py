@@ -36,18 +36,12 @@ Examples:
     )
 
     # Input/Output
-    parser.add_argument(
-        "images", nargs="+", help="Path(s) to input images (JPEG/PNG). Supports wildcards."
-    )
-    parser.add_argument(
-        "--out-dir", default="out", help="Output directory for results (default: ./out)"
-    )
+    parser.add_argument("images", nargs="+", help="Path(s) to input images (JPEG/PNG). Supports wildcards.")
+    parser.add_argument("--out-dir", default="out", help="Output directory for results (default: ./out)")
 
     # Calibration options
     calib_group = parser.add_argument_group("Calibration")
-    calib_group.add_argument(
-        "--pixels-per-mm", type=float, help="Known pixels-per-mm conversion factor"
-    )
+    calib_group.add_argument("--pixels-per-mm", type=float, help="Known pixels-per-mm conversion factor")
     calib_group.add_argument(
         "--click-scale",
         action="store_true",
@@ -97,9 +91,7 @@ Examples:
         default=51,
         help="Adaptive threshold block size, must be odd (default: 51)",
     )
-    binary_group.add_argument(
-        "--binary-C", type=int, default=2, help="Adaptive threshold constant C (default: 2)"
-    )
+    binary_group.add_argument("--binary-C", type=int, default=2, help="Adaptive threshold constant C (default: 2)")
     binary_group.add_argument(
         "--binary-invert",
         action="store_true",
@@ -114,12 +106,8 @@ Examples:
 
     # Canny edge detection parameters
     canny_group = parser.add_argument_group("Canny Edge Detection")
-    canny_group.add_argument(
-        "--canny-low", type=int, default=75, help="Canny lower threshold (default: 75)"
-    )
-    canny_group.add_argument(
-        "--canny-high", type=int, default=200, help="Canny upper threshold (default: 200)"
-    )
+    canny_group.add_argument("--canny-low", type=int, default=75, help="Canny lower threshold (default: 75)")
+    canny_group.add_argument("--canny-high", type=int, default=200, help="Canny upper threshold (default: 200)")
 
     # Image processing
     process_group = parser.add_argument_group("Image Processing")
@@ -138,20 +126,14 @@ Examples:
 
     # Output options
     output_group = parser.add_argument_group("Output Options")
-    output_group.add_argument(
-        "--no-overlay", action="store_true", help="Skip generating overlay visualization images"
-    )
-    output_group.add_argument(
-        "--save-debug", action="store_true", help="Save debug images (binary masks, edge maps)"
-    )
+    output_group.add_argument("--no-overlay", action="store_true", help="Skip generating overlay visualization images")
+    output_group.add_argument("--save-debug", action="store_true", help="Save debug images (binary masks, edge maps)")
     output_group.add_argument(
         "--fit-ellipse",
         action="store_true",
         help="Also fit ellipse and calculate ellipticity metrics",
     )
-    output_group.add_argument(
-        "--quiet", action="store_true", help="Suppress progress output, only show final summary"
-    )
+    output_group.add_argument("--quiet", action="store_true", help="Suppress progress output, only show final summary")
 
     return parser
 
@@ -243,9 +225,7 @@ def print_summary(all_results: list[dict], args) -> None:
 
     if successful > 0:
         # Calculate statistics for successful analyses
-        diameters_mm = [
-            r.get("diameter_mm") for r in all_results if not r.get("error") and r.get("diameter_mm")
-        ]
+        diameters_mm = [r.get("diameter_mm") for r in all_results if not r.get("error") and r.get("diameter_mm")]
 
         if diameters_mm:
             import numpy as np

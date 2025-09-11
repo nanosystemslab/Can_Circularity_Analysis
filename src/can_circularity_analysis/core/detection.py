@@ -75,9 +75,7 @@ def fit_circle_to_contour(
     points = contour[:, 0, :].astype(float)
 
     try:
-        model_robust, inliers = ransac(
-            points, CircleModel, min_samples=3, residual_threshold=2.0, max_trials=1000
-        )
+        model_robust, inliers = ransac(points, CircleModel, min_samples=3, residual_threshold=2.0, max_trials=1000)
 
         if model_robust is None:
             # Fallback to least squares if RANSAC fails
@@ -122,9 +120,7 @@ def fit_ellipse_to_contour(contour: np.ndarray) -> dict[str, Any]:
             "minor_px": float(minor_axis),
             "angle_deg": float(angle),
             "ellipticity": float(major_axis / minor_axis) if minor_axis > 0 else None,
-            "eccentricity": math.sqrt(1.0 - (minor_axis / major_axis) ** 2)
-            if major_axis > 0
-            else None,
+            "eccentricity": math.sqrt(1.0 - (minor_axis / major_axis) ** 2) if major_axis > 0 else None,
             "area_px2": math.pi * (major_axis / 2.0) * (minor_axis / 2.0),
             "ovalization": (major_axis - minor_axis) / ((major_axis + minor_axis) / 2.0)
             if (major_axis + minor_axis) > 0
@@ -265,9 +261,7 @@ def detect_circular_contour(image: np.ndarray, method: str = "binary", **kwargs)
     }
 
 
-def _hough_circle_fallback(
-    gray: np.ndarray, edges: np.ndarray | None, **kwargs
-) -> dict[str, Any] | None:
+def _hough_circle_fallback(gray: np.ndarray, edges: np.ndarray | None, **kwargs) -> dict[str, Any] | None:
     """Fallback Hough circle detection when contour methods fail."""
     # Apply CLAHE for better circle detection
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
@@ -374,9 +368,7 @@ def analyze_image_file(image_path: str, output_dir: str = "out", **kwargs) -> di
 
     # Calculate metrics
     metrics = calculate_circularity_metrics(contour, center_x, center_y, radius, mm_per_pixel)
-    deviation_metrics = calculate_deviation_metrics(
-        points, center_x, center_y, radius, mm_per_pixel
-    )
+    deviation_metrics = calculate_deviation_metrics(points, center_x, center_y, radius, mm_per_pixel)
 
     # Optional ellipse fitting
     ellipse_result = None
@@ -388,8 +380,7 @@ def analyze_image_file(image_path: str, output_dir: str = "out", **kwargs) -> di
                     "major_mm": ellipse_result["major_px"] * mm_per_pixel,
                     "minor_mm": ellipse_result["minor_px"] * mm_per_pixel,
                     "area_mm2": ellipse_result["area_px2"] * (mm_per_pixel**2),
-                    "ovalization_mm": (ellipse_result["major_px"] - ellipse_result["minor_px"])
-                    * mm_per_pixel,
+                    "ovalization_mm": (ellipse_result["major_px"] - ellipse_result["minor_px"]) * mm_per_pixel,
                 }
             )
 
@@ -455,9 +446,7 @@ def _setup_calibration(image_path: str, **kwargs) -> tuple[float | None, dict | 
     if kwargs.get("scale_from"):
         pixels_per_mm, scale_metadata = load_calibration(kwargs["scale_from"])
     elif kwargs.get("scale_pts"):
-        pixels_per_mm, scale_points = calibrate_from_points(
-            kwargs["scale_pts"], kwargs.get("known_mm", 50.0)
-        )
+        pixels_per_mm, scale_points = calibrate_from_points(kwargs["scale_pts"], kwargs.get("known_mm", 50.0))
         scale_metadata = {"scale_points_full_px": scale_points}
     elif kwargs.get("click_scale"):
         try:
@@ -467,9 +456,7 @@ def _setup_calibration(image_path: str, **kwargs) -> tuple[float | None, dict | 
             )
             scale_metadata = {"scale_points_full_px": scale_points}
         except (cv2.error, RuntimeError):
-            raise SystemExit(
-                "OpenCV GUI not available. Use --scale-pts or --pixels-per-mm instead."
-            )
+            raise SystemExit("OpenCV GUI not available. Use --scale-pts or --pixels-per-mm instead.")
     else:
         pixels_per_mm = kwargs.get("pixels_per_mm")
 

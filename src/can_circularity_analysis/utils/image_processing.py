@@ -46,16 +46,12 @@ def segment_image(
         Tuple of (binary_mask, edges) - only one will be non-None
     """
     if method == "binary":
-        return _segment_binary(
-            gray_image, binary_block_size, binary_C, binary_invert, erode_iterations
-        ), None
+        return _segment_binary(gray_image, binary_block_size, binary_C, binary_invert, erode_iterations), None
     else:
         return None, _segment_canny(gray_image, canny_low, canny_high)
 
 
-def _segment_binary(
-    gray_image: np.ndarray, block_size: int, C: int, invert: bool, erode_iterations: int
-) -> np.ndarray:
+def _segment_binary(gray_image: np.ndarray, block_size: int, C: int, invert: bool, erode_iterations: int) -> np.ndarray:
     """Segment image using adaptive thresholding.
 
     Args:
@@ -74,9 +70,7 @@ def _segment_binary(
 
     # Apply adaptive threshold
     threshold_type = cv2.THRESH_BINARY if invert else cv2.THRESH_BINARY_INV
-    binary = cv2.adaptiveThreshold(
-        gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, threshold_type, block_size, C
-    )
+    binary = cv2.adaptiveThreshold(gray_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, threshold_type, block_size, C)
 
     # Apply morphological operations
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -149,9 +143,7 @@ def apply_gaussian_blur(image: np.ndarray, kernel_size: int = 5, sigma: float = 
     return cv2.GaussianBlur(image, (kernel_size, kernel_size), sigma)
 
 
-def crop_image(
-    image: np.ndarray, crop_region: tuple[int, int, int, int]
-) -> tuple[np.ndarray, tuple[int, int]]:
+def crop_image(image: np.ndarray, crop_region: tuple[int, int, int, int]) -> tuple[np.ndarray, tuple[int, int]]:
     """Crop image to specified region.
 
     Args:

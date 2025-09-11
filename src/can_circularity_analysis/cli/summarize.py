@@ -17,18 +17,10 @@ except ImportError:
 
 def create_argument_parser():
     """Create argument parser for the summarize command."""
-    parser = argparse.ArgumentParser(
-        description="Summarize can analysis results and generate plots."
-    )
-    parser.add_argument(
-        "--in-dir", default="out", help="Directory containing *_metrics.json files (default: ./out)"
-    )
-    parser.add_argument(
-        "--out-dir", default="out", help="Output directory for summaries and plots (default: ./out)"
-    )
-    parser.add_argument(
-        "--make-plots", action="store_true", help="Generate overlay plots and histograms"
-    )
+    parser = argparse.ArgumentParser(description="Summarize can analysis results and generate plots.")
+    parser.add_argument("--in-dir", default="out", help="Directory containing *_metrics.json files (default: ./out)")
+    parser.add_argument("--out-dir", default="out", help="Output directory for summaries and plots (default: ./out)")
+    parser.add_argument("--make-plots", action="store_true", help="Generate overlay plots and histograms")
     return parser
 
 
@@ -128,8 +120,10 @@ def create_rim_overlay_plot(cases, output_path):
         plt.figtext(
             0.02,
             0.02,
-            (f"Note: Showing first {max_legend_items} labels. "
-             f"{len(cases) - max_legend_items} additional cases unlabeled."),
+            (
+                f"Note: Showing first {max_legend_items} labels. "
+                f"{len(cases) - max_legend_items} additional cases unlabeled."
+            ),
             fontsize=8,
             style="italic",
         )
@@ -162,8 +156,7 @@ def create_histogram_plots(cases, plots_dir):
         plt.text(
             0.02,
             0.98,
-            (f"Mean: {mean_d:.2f}±{std_d:.2f} mm\n"
-             f"Range: {min(diameters):.2f}-{max(diameters):.2f} mm"),
+            (f"Mean: {mean_d:.2f}±{std_d:.2f} mm\n" f"Range: {min(diameters):.2f}-{max(diameters):.2f} mm"),
             transform=plt.gca().transAxes,
             verticalalignment="top",
             bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
@@ -178,9 +171,7 @@ def create_histogram_plots(cases, plots_dir):
     rms_values = [c["rms_mm"] for c in cases if c["rms_mm"] is not None]
     if rms_values:
         plt.figure(figsize=(8, 6))
-        plt.hist(
-            rms_values, bins=min(15, len(rms_values)), alpha=0.7, edgecolor="black", color="orange"
-        )
+        plt.hist(rms_values, bins=min(15, len(rms_values)), alpha=0.7, edgecolor="black", color="orange")
         plt.xlabel("RMS Out-of-Round (mm)")
         plt.ylabel("Count")
         plt.title(f"Out-of-Round Distribution (n={len(rms_values)})")
@@ -295,9 +286,7 @@ def main():
     print(f"Found {len(metrics_files)} metrics files in {in_dir}")
 
     if not PLOTTING_AVAILABLE:
-        print(
-            "Warning: pandas/matplotlib not available. Install with: pip install pandas matplotlib"
-        )
+        print("Warning: pandas/matplotlib not available. Install with: pip install pandas matplotlib")
         return
 
     # Load actual data

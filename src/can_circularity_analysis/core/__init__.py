@@ -22,6 +22,20 @@ from .metrics import (
 )
 from .visualization import create_analysis_overlay, draw_scale_reference, save_debug_images
 
+# Conditionally import reconstruction if dependencies available
+try:
+    from .reconstruction import CanReconstructionError, CanSTEPGenerator, create_can_step_file
+
+    RECONSTRUCTION_AVAILABLE = True
+    __all_reconstruction__ = [
+        "create_can_step_file",
+        "CanSTEPGenerator",
+        "CanReconstructionError",
+    ]
+except ImportError:
+    RECONSTRUCTION_AVAILABLE = False
+    __all_reconstruction__ = []
+
 __all__ = [
     # Calibration
     "calibrate_pixels_per_mm",
@@ -44,4 +58,6 @@ __all__ = [
     "create_analysis_overlay",
     "draw_scale_reference",
     "save_debug_images",
+    # Reconstruction (if available)
+    *__all_reconstruction__,
 ]

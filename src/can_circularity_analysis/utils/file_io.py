@@ -36,9 +36,7 @@ def save_results(
     output_paths = {}
 
     # Save rim points as CSV
-    csv_path = save_rim_points_csv(
-        points, center_x, center_y, offset, mm_per_pixel, output_dir, stem
-    )
+    csv_path = save_rim_points_csv(points, center_x, center_y, offset, mm_per_pixel, output_dir, stem)
     output_paths["csv_points"] = csv_path
     metrics["csv_points"] = csv_path
 

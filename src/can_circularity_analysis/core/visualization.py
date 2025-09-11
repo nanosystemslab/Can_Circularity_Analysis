@@ -152,9 +152,7 @@ def draw_scale_reference(
         cv2.circle(image, p2, radius, point_color, -1)
 
 
-def save_debug_images(
-    binary_image: np.ndarray | None, edges: np.ndarray | None, output_dir: str, stem: str
-) -> None:
+def save_debug_images(binary_image: np.ndarray | None, edges: np.ndarray | None, output_dir: str, stem: str) -> None:
     """Save debug images for troubleshooting segmentation.
 
     Args:
@@ -172,9 +170,7 @@ def save_debug_images(
         cv2.imwrite(debug_path, edges)
 
 
-def create_comparison_overlay(
-    images: list, titles: list, output_path: str, max_height: int = 600
-) -> str:
+def create_comparison_overlay(images: list, titles: list, output_path: str, max_height: int = 600) -> str:
     """Create side-by-side comparison of multiple images.
 
     Args:
