@@ -10,10 +10,11 @@
 ![Analysis Types](https://img.shields.io/badge/Analysis-Circularity%20%7C%20Diameter%20%7C%20Ovality-blue)
 ![Detection Methods](https://img.shields.io/badge/Detection-Binary%20%7C%20Canny%20%7C%20Hough-orange)
 ![Measurements](https://img.shields.io/badge/Measures-RMS%20%7C%20Ellipticity%20%7C%20Deviation-green)
+![3D Reconstruction](https://img.shields.io/badge/3D-Reconstruction%20%7C%20STL%20%7C%20OBJ%20%7C%20PLY-purple)
 ![Interfaces](https://img.shields.io/badge/Interface-CLI%20%7C%20Python%20API-red)
-![Output Types](https://img.shields.io/badge/Outputs-JSON%20%7C%20CSV%20%7C%20Plots-purple)
+![Output Types](https://img.shields.io/badge/Outputs-JSON%20%7C%20CSV%20%7C%20Plots%20%7C%203D%20Models-purple)
 
-A computer vision tool for automated analysis of can rim circularity and quality control in manufacturing. This package provides both command-line utilities and a Python API for measuring circular deviation, diameter accuracy, and out-of-round characteristics of cylindrical objects.
+A computer vision tool for automated analysis of can rim circularity and quality control in manufacturing. This package provides both command-line utilities and a Python API for measuring circular deviation, diameter accuracy, and out-of-round characteristics of cylindrical objects, with advanced 3D reconstruction capabilities for generating mesh models from top and bottom rim profiles.
 
 ## Features
 
@@ -23,6 +24,8 @@ A computer vision tool for automated analysis of can rim circularity and quality
 - **Comprehensive circularity metrics** including area, perimeter, and deviation analysis
 - **Out-of-round quantification** with RMS, standard deviation, and range statistics
 - **Ellipse fitting** for ovalization and eccentricity analysis
+- **3D reconstruction** from top and bottom rim profiles with configurable profile types
+- **Multiple mesh formats** (STL, OBJ, PLY) with proper wall thickness implementation
 - **Batch processing** for analyzing multiple images efficiently
 - **Statistical summaries** with visualization plots
 - **Export capabilities** for rim point coordinates and analysis results
@@ -33,6 +36,7 @@ A computer vision tool for automated analysis of can rim circularity and quality
 - [Quick Start](#quick-start)
 - [Calibration](#calibration)
 - [Analysis Workflow](#analysis-workflow)
+- [3D Reconstruction](#3d-reconstruction)
 - [Batch Processing](#batch-processing)
 - [Output Files](#output-files)
 - [Command Reference](#command-reference)
@@ -58,8 +62,12 @@ cd Can_Circularity_Analysis
 # Install dependencies
 poetry install
 
+# For 3D reconstruction capabilities
+poetry install --extras "reconstruction"
+
 # Verify installation
 poetry run can-analyze --help
+poetry run can-reconstruct --help
 ```
 
 ### Using pip
@@ -68,6 +76,9 @@ poetry run can-analyze --help
 git clone https://github.com/nanosystemslab/Can_Circularity_Analysis.git
 cd Can_Circularity_Analysis
 pip install -e .
+
+# For 3D reconstruction
+pip install -e ".[reconstruction]"
 ```
 
 ### Dependencies
@@ -78,6 +89,10 @@ Core dependencies are automatically installed:
 - `numpy` - Numerical computations
 - `pandas` - Data analysis (for summarization)
 - `matplotlib` - Plotting and visualization
+
+Additional dependencies for 3D reconstruction:
+- `trimesh` - 3D mesh processing and export
+- `scipy` - Advanced interpolation and scientific computing
 
 ## Quick Start
 
@@ -98,7 +113,28 @@ poetry run can-analyze image.jpg --pixels-per-mm 10.5 --out-dir results
 poetry run can-analyze image.jpg --click-scale --known-mm 50.0 --out-dir results
 ```
 
-### 3. Batch Processing
+### 3. 3D Reconstruction
+
+```bash
+# Create 3D model from top and bottom rim analysis
+poetry run can-reconstruct \
+  results/can_top_metrics.json \
+  results/can_bottom_metrics.json \
+  models/can_model.stl \
+  --top-profile ellipse \
+  --bottom-profile ellipse \
+  --wall-thickness 0.1 \
+  --height 100.0
+
+# Preview profiles before reconstruction
+poetry run can-reconstruct \
+  results/can_top_metrics.json \
+  results/can_bottom_metrics.json \
+  models/can_model.obj \
+  --plot-profiles
+```
+
+### 4. Batch Processing
 
 ```bash
 # Process multiple images
@@ -196,7 +232,7 @@ Once calibration is established, process entire directories efficiently.
 #### Process by Can Size
 
 ```bash
-# 60mm cans
+# 60mm cans with ellipse fitting for reconstruction
 poetry run can-analyze data/60mm_topDown_ovality/*.jpg \
   --scale-from scales/ppmm_60mm.json \
   --method canny \
@@ -219,48 +255,71 @@ poetry run can-analyze data/120mm_topDown_ovality/*.jpg \
   --out-dir ./results/120mm/
 ```
 
-#### Automated Processing Script
+### Step 3: 3D Reconstruction (Optional)
 
-Create `process_all_sizes.sh`:
+Generate 3D models from top and bottom rim analyses for visualization, simulation, or manufacturing applications.
+
+#### Single Can Reconstruction
 
 ```bash
-#!/bin/bash
-set -e
+# Reconstruct with elliptical profiles (recommended for oval cans)
+poetry run can-reconstruct \
+  results/60mm/can_sample_top_metrics.json \
+  results/60mm/can_sample_bottom_metrics.json \
+  models/can_sample_ellipse.stl \
+  --top-profile ellipse \
+  --bottom-profile ellipse \
+  --wall-thickness 0.1 \
+  --height 100.0
 
-echo "Starting batch processing of all can sizes..."
+# Reconstruct with circular profiles
+poetry run can-reconstruct \
+  results/60mm/can_sample_top_metrics.json \
+  results/60mm/can_sample_bottom_metrics.json \
+  models/can_sample_circle.obj \
+  --top-profile circle \
+  --bottom-profile circle \
+  --wall-thickness 0.15 \
+  --height 120.0
 
-# Array of can sizes and their parameters
-declare -A can_configs=(
-    ["40mm"]="38:42"
-    ["60mm"]="58:62"
-    ["80mm"]="78:82"
-    ["100mm"]="98:102"
-    ["120mm"]="118:122"
-)
-
-for size in "${!can_configs[@]}"; do
-    IFS=':' read -r min_diam max_diam <<< "${can_configs[$size]}"
-
-    echo "Processing ${size} cans (${min_diam}-${max_diam}mm)..."
-
-    poetry run can-analyze data/${size}_topDown_ovality/*.jpg \
-      --scale-from scales/ppmm_${size}.json \
-      --method canny \
-      --canny-low 50 --canny-high 150 \
-      --prefer-center \
-      --min-diameter-mm ${min_diam} \
-      --max-diameter-mm ${max_diam} \
-      --fit-ellipse \
-      --crop 0,750,99999,99999 \
-      --out-dir ./results/${size}/
-
-    echo "✓ Completed ${size}"
-done
-
-echo "Batch processing complete!"
+# Use actual measured points for maximum accuracy
+poetry run can-reconstruct \
+  results/60mm/can_sample_top_metrics.json \
+  results/60mm/can_sample_bottom_metrics.json \
+  models/can_sample_measured.ply \
+  --top-profile measured \
+  --bottom-profile measured \
+  --wall-thickness 0.1 \
+  --height 100.0
 ```
 
-### Step 3: Handle Failed Detections
+#### Preview Before Reconstruction
+
+```bash
+# Show 3D plot of profiles before creating mesh
+poetry run can-reconstruct \
+  results/60mm/can_sample_top_metrics.json \
+  results/60mm/can_sample_bottom_metrics.json \
+  models/can_sample.stl \
+  --plot-profiles \
+  --wall-thickness 0.1 \
+  --height 100.0
+```
+
+#### Batch Reconstruction
+
+```bash
+# Reconstruct all matching pairs in directories
+poetry run can-reconstruct \
+  --batch results/60mm_tops/ results/60mm_bottoms/ \
+  --out-dir models/60mm/ \
+  --top-profile ellipse \
+  --bottom-profile ellipse \
+  --wall-thickness 0.1 \
+  --height 100.0
+```
+
+### Step 4: Handle Failed Detections
 
 After batch processing, identify and fix individual problematic images.
 
@@ -303,24 +362,7 @@ poetry run can-analyze data/60mm_topDown_ovality/problematic_image.jpg \
   --out-dir ./results/60mm_fixed/
 ```
 
-#### Debug Analysis
-
-Use debug output to understand detection issues:
-
-```bash
-# Generate debug images to see what went wrong
-poetry run can-analyze problematic_image.jpg \
-  --scale-from scales/ppmm_60mm.json \
-  --save-debug \
-  --out-dir debug/
-
-# Examine intermediate results:
-# debug/problematic_image_binary.png - thresholding result
-# debug/problematic_image_edges.png - edge detection result
-# debug/problematic_image_overlay.png - final detection
-```
-
-### Step 4: Generate Comprehensive Summaries
+### Step 5: Generate Comprehensive Summaries
 
 Once all images are successfully processed, create summary reports and visualizations.
 
@@ -339,119 +381,196 @@ poetry run can-summarize \
   --make-plots
 ```
 
-#### Cross-Size Comparison
+## 3D Reconstruction
+
+The 3D reconstruction feature allows you to create detailed mesh models of cans from top and bottom rim analyses. This is useful for visualization, manufacturing simulation, quality control documentation, and digital twin applications.
+
+### Profile Types
+
+Choose the appropriate profile type based on your analysis needs:
+
+#### Ellipse Profile (Recommended for Oval Cans)
+```bash
+poetry run can-reconstruct top.json bottom.json model.stl \
+  --top-profile ellipse \
+  --bottom-profile ellipse
+```
+- Uses fitted ellipse data from analysis
+- Captures ovality and eccentricity
+- Best for deformed or intentionally oval cans
+
+#### Circle Profile
+```bash
+poetry run can-reconstruct top.json bottom.json model.stl \
+  --top-profile circle \
+  --bottom-profile circle
+```
+- Uses fitted circle data from analysis
+- Creates perfectly circular cross-sections
+- Good for comparing against ideal geometry
+
+#### Measured Profile (Highest Accuracy)
+```bash
+poetry run can-reconstruct top.json bottom.json model.stl \
+  --top-profile measured \
+  --bottom-profile measured
+```
+- Uses actual measured rim points from CSV files
+- Captures all irregularities and asymmetries
+- Most accurate representation of actual can shape
+
+### Wall Thickness Implementation
+
+The wall thickness parameter controls how the 3D model represents the material:
 
 ```bash
-# Compare across all sizes
-poetry run can-summarize \
-  --in-dir ./results/ \
-  --out-dir ./reports/comparison/ \
-  --make-plots
+# Thin wall (0.1mm) - typical for aluminum cans
+poetry run can-reconstruct top.json bottom.json thin_can.stl \
+  --wall-thickness 0.1
+
+# Thick wall (0.5mm) - for steel cans or simulation
+poetry run can-reconstruct top.json bottom.json thick_can.stl \
+  --wall-thickness 0.5
 ```
 
-#### Production Report Generation
+**How it works:**
+- Your analyzed profile becomes the **centerline** of the wall
+- Inner surface: centerline - (thickness/2)
+- Outer surface: centerline + (thickness/2)
+- Creates proper hollow geometry with realistic wall structure
 
-Create `generate_reports.sh`:
+### Output Formats
+
+Multiple 3D formats are supported:
 
 ```bash
-#!/bin/bash
+# STL format (most common for 3D printing)
+poetry run can-reconstruct top.json bottom.json model.stl
 
-echo "Generating comprehensive analysis reports..."
+# OBJ format (good for CAD software)
+poetry run can-reconstruct top.json bottom.json model.obj
 
-# Individual size reports
-for size in 40mm 60mm 80mm 100mm 120mm; do
-    if [ -d "results/${size}" ]; then
-        echo "Generating ${size} report..."
-        poetry run can-summarize \
-          --in-dir ./results/${size}/ \
-          --out-dir ./reports/${size}/ \
-          --make-plots
-    fi
-done
+# PLY format (preserves more metadata)
+poetry run can-reconstruct top.json bottom.json model.ply
 
-# Overall summary
-echo "Generating overall comparison report..."
-poetry run can-summarize \
-  --in-dir ./results/ \
-  --out-dir ./reports/overall/ \
-  --make-plots
-
-echo "Reports complete! Check ./reports/ directory"
-echo ""
-echo "Key files generated:"
-echo "  - reports/*/plots/rim_overlay.png (shape comparisons)"
-echo "  - reports/*/plots/*_histogram.png (quality distributions)"
-echo "  - reports/*/metrics_all.csv (complete data)"
-echo ""
-echo "Summary statistics:"
-for size in 40mm 60mm 80mm 100mm 120mm; do
-    if [ -f "results/${size}/batch_summary.json" ]; then
-        total=$(jq '.total_images' results/${size}/batch_summary.json)
-        success=$(jq '.successful_analyses' results/${size}/batch_summary.json)
-        echo "  ${size}: ${success}/${total} successful"
-    fi
-done
+# Auto-detect from extension
+poetry run can-reconstruct top.json bottom.json model.stl \
+  --output-format auto
 ```
 
-### Quality Control Workflow
+### Advanced Options
 
-#### Real-time Production Monitoring
-
+#### Profile Alignment
 ```bash
-# Daily production analysis
-DATE=$(date +%Y%m%d)
-mkdir -p production_analysis/${DATE}
+# Align ellipse orientations for straight walls (default)
+poetry run can-reconstruct top.json bottom.json aligned.stl \
+  --align-profiles
 
-# Process today's images
-poetry run can-analyze production_images/${DATE}/*.jpg \
-  --scale-from scales/production_line_cal.json \
-  --method canny \
-  --min-diameter-mm 58 --max-diameter-mm 62 \
-  --out-dir production_analysis/${DATE}/
-
-# Generate quality report
-poetry run can-summarize \
-  --in-dir production_analysis/${DATE}/ \
-  --out-dir quality_reports/${DATE}/ \
-  --make-plots
-
-# Alert if quality issues detected
-python check_quality_thresholds.py quality_reports/${DATE}/metrics_all.csv
+# Preserve individual orientations (may create twisted walls)
+poetry run can-reconstruct top.json bottom.json twisted.stl \
+  --no-align-profiles
 ```
 
-#### Detection Methods and Parameters
-
-**Binary Segmentation** - Best for high-contrast images:
+#### Mesh Resolution
 ```bash
-poetry run can-analyze image.jpg --method binary --binary-block-size 51 --binary-C 2
+# High resolution (128 points around profile)
+poetry run can-reconstruct top.json bottom.json hires.stl \
+  --resolution 128
+
+# Low resolution (32 points) for faster processing
+poetry run can-reconstruct top.json bottom.json lowres.stl \
+  --resolution 32
 ```
 
-**Canny Edge Detection** - Better for noisy or low-contrast images:
+#### Visualization and Debugging
 ```bash
-poetry run can-analyze image.jpg --method canny --canny-low 50 --canny-high 150
+# Preview profiles in 3D before reconstruction
+poetry run can-reconstruct top.json bottom.json model.stl \
+  --plot-profiles
+
+# Check profile alignment and wall thickness visually
+poetry run can-reconstruct top.json bottom.json debug.stl \
+  --plot-profiles \
+  --wall-thickness 0.2 \
+  --height 150.0
 ```
 
-#### Troubleshooting Common Issues
+### Batch Reconstruction
 
-**Low success rate in batch processing:**
-1. Check calibration accuracy with known samples
-2. Verify image quality (focus, lighting, contrast)
-3. Adjust detection parameters for your specific setup
-4. Consider different crop regions
+Process multiple can pairs automatically:
 
-**Inconsistent measurements:**
-1. Ensure consistent imaging conditions
-2. Verify stable camera positioning
-3. Check for vibration or movement during imaging
-4. Validate calibration across the full image area
-
-**Processing speed optimization:**
 ```bash
-# Parallel processing for large batches
-find data/ -name "*.jpg" | \
-xargs -n 1 -P 4 -I {} poetry run can-analyze {} \
-  --scale-from scales/ppmm_60mm.json \
-  --out-dir results/
+# Reconstruct all matching pairs
+poetry run can-reconstruct \
+  --batch analysis/tops/ analysis/bottoms/ \
+  --out-dir models/ \
+  --top-profile ellipse \
+  --bottom-profile ellipse \
+  --wall-thickness 0.1 \
+  --height 120.0
+
+# Mixed profile types
+poetry run can-reconstruct \
+  --batch analysis/tops/ analysis/bottoms/ \
+  --out-dir models/mixed/ \
+  --top-profile ellipse \
+  --bottom-profile circle \
+  --wall-thickness 0.15
+```
+
+### Applications
+
+#### Quality Control Documentation
+```bash
+# Create models showing actual vs. ideal geometry
+poetry run can-reconstruct top.json bottom.json actual.stl \
+  --top-profile measured --bottom-profile measured
+
+poetry run can-reconstruct top.json bottom.json ideal.stl \
+  --top-profile circle --bottom-profile circle
+```
+
+#### Manufacturing Simulation
+```bash
+# Generate models for FEA or CFD analysis
+poetry run can-reconstruct top.json bottom.json simulation.obj \
+  --top-profile ellipse \
+  --bottom-profile ellipse \
+  --wall-thickness 0.12 \
+  --resolution 128
+```
+
+#### 3D Printing and Prototyping
+```bash
+# Create physical prototypes
+poetry run can-reconstruct top.json bottom.json prototype.stl \
+  --wall-thickness 2.0 \
+  --resolution 64
+```
+
+### Metadata Files
+
+Each reconstruction generates a metadata file with complete parameters:
+
+```json
+{
+  "output_file": "can_model.stl",
+  "reconstruction_params": {
+    "wall_thickness_mm": 0.1,
+    "height_mm": 100.0,
+    "top_profile_type": "ellipse",
+    "bottom_profile_type": "ellipse",
+    "reconstruction_method": "enhanced_walled_loft"
+  },
+  "top_rim_data": {
+    "diameter_mm": 59.84,
+    "ellipse_data": {...}
+  },
+  "bottom_rim_data": {
+    "diameter_mm": 59.78,
+    "ellipse_data": {...}
+  }
+}
 ```
 
 ## Batch Processing
@@ -494,7 +613,14 @@ poetry run can-summarize \
   --out-dir qc_reports/ \
   --make-plots
 
-echo "Quality control analysis complete. Check qc_reports/ for results."
+# Create 3D models for documentation
+poetry run can-reconstruct \
+  --batch qc_results/tops/ qc_results/bottoms/ \
+  --out-dir qc_models/ \
+  --top-profile ellipse \
+  --bottom-profile ellipse
+
+echo "Quality control analysis complete. Check qc_reports/ for results and qc_models/ for 3D models."
 ```
 
 ## Output Files
@@ -513,7 +639,10 @@ Complete analysis results including:
   "center_mm": [125.4, 98.7],
   "ellipse": {
     "ellipticity": 1.023,
-    "ovalization_mm": 0.089
+    "ovalization_mm": 0.089,
+    "major_mm": 60.12,
+    "minor_mm": 59.87,
+    "angle_deg": 45.2
   }
 }
 ```
@@ -532,6 +661,16 @@ Visualization showing:
 - Individual rim points (red dots)
 - Fitted ellipse (purple, if enabled)
 - Measurement annotations
+
+### 3D Reconstruction Results
+
+#### Mesh Files
+- `*.stl` - STL format for 3D printing and CAD
+- `*.obj` - OBJ format for graphics and simulation
+- `*.ply` - PLY format with extended metadata
+
+#### Metadata Files
+- `*_metadata.json` - Complete reconstruction parameters and source data
 
 ### Batch Results
 
@@ -593,6 +732,31 @@ Canny edge detection:
   --canny-high INT            Upper threshold (default: 200)
 ```
 
+### can-reconstruct
+
+```bash
+poetry run can-reconstruct [OPTIONS] TOP_JSON BOTTOM_JSON OUTPUT_FILE
+
+Profile Selection:
+  --top-profile [circle|ellipse|measured]     Top rim profile type (default: ellipse)
+  --bottom-profile [circle|ellipse|measured] Bottom rim profile type (default: ellipse)
+
+Reconstruction Parameters:
+  --wall-thickness FLOAT      Wall thickness in mm (default: 0.1)
+  --height FLOAT              Height between profiles in mm (default: 100.0)
+  --resolution INT            Points around each profile (default: 64)
+
+Output Options:
+  --output-format [stl|obj|ply|auto]  Output format (default: auto)
+  --plot-profiles             Show 3D plot before meshing
+  --align-profiles            Align orientations for straight walls (default: True)
+  --no-align-profiles         Preserve individual orientations
+
+Batch Processing:
+  --batch TOP_DIR BOTTOM_DIR  Batch process matching files
+  --out-dir TEXT              Output directory for batch (default: models)
+```
+
 ### can-summarize
 
 ```bash
@@ -617,11 +781,33 @@ results = analyze_image_file(
     output_dir="results",
     pixels_per_mm=10.5,
     min_diameter_mm=85,
-    max_diameter_mm=95
+    max_diameter_mm=95,
+    fit_ellipse=True
 )
 
 print(f"Diameter: {results['diameter_mm']:.2f} mm")
 print(f"Circularity: {results['circularity_4piA_P2']:.3f}")
+print(f"Ellipticity: {results['ellipse']['ellipticity']:.3f}")
+```
+
+### 3D Reconstruction API
+
+```python
+from can_circularity_analysis.core.reconstruction import create_can_mesh_file
+
+# Create 3D model from analysis results
+mesh_path = create_can_mesh_file(
+    top_json="results/can_top_metrics.json",
+    bottom_json="results/can_bottom_metrics.json",
+    output_path="models/can_model.stl",
+    wall_thickness=0.1,
+    height=100.0,
+    top_profile_type="ellipse",
+    bottom_profile_type="ellipse",
+    plot_profiles=True
+)
+
+print(f"3D model created: {mesh_path}")
 ```
 
 ### Advanced Usage
@@ -656,13 +842,15 @@ metrics = calculate_circularity_metrics(contour, center_x, center_y, radius)
 print(f"Circularity: {metrics['circularity_4piA_P2']:.3f}")
 ```
 
-### Batch Processing
+### Batch Processing with 3D Reconstruction
 
 ```python
 from pathlib import Path
 from can_circularity_analysis import analyze_image_file
+from can_circularity_analysis.core.reconstruction import create_can_mesh_file
 from can_circularity_analysis.utils.file_io import save_batch_summary
 
+# Process images
 results = []
 image_dir = Path("production_images")
 
@@ -672,7 +860,8 @@ for image_path in image_dir.glob("*.jpg"):
             str(image_path),
             output_dir="batch_results",
             pixels_per_mm=10.5,
-            method="canny"
+            method="canny",
+            fit_ellipse=True
         )
         results.append(result)
     except Exception as e:
@@ -683,6 +872,23 @@ for image_path in image_dir.glob("*.jpg"):
 
 # Save batch summary
 save_batch_summary(results, "batch_results")
+
+# Create 3D models for successful analyses
+for result in results:
+    if not result.get("error"):
+        # Example: create model if both top and bottom exist
+        top_file = result["metrics_json"]
+        bottom_file = top_file.replace("_top_", "_bottom_")
+
+        if Path(bottom_file).exists():
+            model_path = top_file.replace("_metrics.json", "_model.stl")
+            create_can_mesh_file(
+                top_json=top_file,
+                bottom_json=bottom_file,
+                output_path=model_path,
+                top_profile_type="ellipse",
+                bottom_profile_type="ellipse"
+            )
 ```
 
 ## Configuration
@@ -707,6 +913,11 @@ CENTER_RADIUS_FRAC = 0.4    # Center preference radius
 # Quality filters
 MIN_DIAMETER_MM = 0.0       # No minimum by default
 MAX_DIAMETER_MM = inf       # No maximum by default
+
+# 3D Reconstruction
+WALL_THICKNESS = 0.1        # Default wall thickness (mm)
+MESH_RESOLUTION = 64        # Points around profile
+ALIGN_PROFILES = True       # Align ellipse orientations
 ```
 
 ### Calibration Files
@@ -732,153 +943,3 @@ Calibration data is stored in JSON format:
   - Try different detection method (`--method canny`)
   - Adjust threshold parameters
   - Check image contrast and lighting
-  - Use `--save-debug` to inspect intermediate images
-
-#### Poor circle fitting
-- **Problem**: Inconsistent or poor quality measurements
-- **Solutions**:
-  - Improve image quality (lighting, focus, contrast)
-  - Use `--prefer-center` for centered objects
-  - Adjust edge detection parameters
-  - Consider `--crop` to focus on region of interest
-
-#### Calibration errors
-- **Problem**: "OpenCV GUI not available"
-- **Solutions**:
-  - Use `--scale-pts` instead of `--click-scale` on headless systems
-  - Provide known `--pixels-per-mm` value
-  - Run on system with display capability
-
-#### Diameter filtering issues
-- **Problem**: "Detected rim X mm is outside range"
-- **Solutions**:
-  - Verify calibration accuracy
-  - Adjust `--min-diameter-mm` and `--max-diameter-mm`
-  - Check for incorrect scale or units
-
-### Performance Optimization
-
-#### Large batch processing
-```bash
-# Process images in parallel (if system supports)
-find data/ -name "*.jpg" | xargs -n 1 -P 4 poetry run can-analyze
-```
-
-#### Memory usage
-- Use `--crop` to reduce processing area
-- Process images individually for very large datasets
-- Consider resizing images if extremely high resolution
-
-### Debug Mode
-
-```bash
-# Enable all debug outputs
-poetry run can-analyze image.jpg \
-  --save-debug \
-  --method binary \
-  --out-dir debug_output/
-
-# Check intermediate files:
-# - debug_output/*_binary.png (segmentation result)
-# - debug_output/*_overlay.png (detection visualization)
-```
-
-## Development
-
-### Setting Up Development Environment
-
-```bash
-# Clone repository
-git clone https://github.com/nanosystemslab/Can_Circularity_Analysis.git
-cd Can_Circularity_Analysis
-
-# Install development dependencies
-poetry install
-
-# Install pre-commit hooks
-poetry run pre-commit install
-
-# Run tests
-poetry run pytest
-
-# Run linting
-poetry run ruff check
-poetry run ruff format
-```
-
-### Testing
-
-```bash
-# Run all tests
-poetry run pytest
-
-# Run with coverage
-poetry run pytest --cov=can_circularity_analysis
-
-# Test specific functionality
-poetry run pytest tests/test_detection.py
-```
-
-### Code Quality
-
-```bash
-# Format code
-poetry run ruff format
-
-# Lint code
-poetry run ruff check --fix
-
-# Type checking
-poetry run mypy src/can_circularity_analysis
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass (`poetry run pytest`)
-6. Run code quality checks (`poetry run ruff check`)
-7. Commit your changes (`git commit -m 'Add amazing feature'`)
-8. Push to the branch (`git push origin feature/amazing-feature`)
-9. Open a Pull Request
-
-### Contribution Guidelines
-
-- Follow existing code style (enforced by ruff)
-- Add docstrings for all public functions
-- Include unit tests for new features
-- Update documentation for user-facing changes
-- Ensure backward compatibility when possible
-
-## Citation
-
-If you use this software in your research or industrial applications, please cite:
-
-```bibtex
-@software{can_circularity_analysis,
-  title={Can Circularity Analysis: Computer Vision for Manufacturing Quality Control},
-  author={Nanosystems Lab},
-  year={2025},
-  url={https://github.com/nanosystemslab/Can_Circularity_Analysis},
-  version={0.1.0}
-}
-```
-
-## License
-
-This project is licensed under the GPL-3.0-or-later License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-- **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/nanosystemslab/Can_Circularity_Analysis/issues)
-- **Documentation**: Additional examples and tutorials in the `docs/` directory
-- **Discussions**: Join discussions on [GitHub Discussions](https://github.com/nanosystemslab/Can_Circularity_Analysis/discussions)
-
-## Acknowledgments
-
-- Built with OpenCV for computer vision capabilities
-- Uses scikit-image for robust circle fitting algorithms
-- Inspired by manufacturing quality control requirements
-- Developed at Nanosystems Laboratory
