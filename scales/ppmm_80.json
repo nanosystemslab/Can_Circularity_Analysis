@@ -1,6 +1,6 @@
 {
-  "pixels_per_mm": 22.633946972535647,
-  "known_mm": 30.0,
-  "source_image": "/Users/mnakamura/Desktop/buckling_analysis/data/can_photos/top_down/80mm_topDown_ovality/20250905_144245.jpg",
+  "pixels_per_mm": 22.803508501982762,
+  "known_mm": null,
+  "source_image": "data/80mm_toDown_ovality/80mm_01_T.jpg",
   "scale_points_full_px": null
 }

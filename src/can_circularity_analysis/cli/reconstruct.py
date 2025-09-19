@@ -13,20 +13,23 @@ def create_argument_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic reconstruction with explicit profile types
-  can-reconstruct top.json bottom.json output.obj --top-profile ellipse --bottom-profile circle
+  # Basic reconstruction with best contour data (most accurate)
+  can-reconstruct top.json bottom.json output.stl --top-profile best_contour --bottom-profile best_contour
 
   # Plot profiles first to check geometry
-  can-reconstruct top.json bottom.json can.stl --top-profile ellipse --bottom-profile ellipse --plot-profiles
+  can-reconstruct top.json bottom.json can.stl --top-profile best_contour --bottom-profile best_contour --plot-profiles
+
+  # Fallback to ellipse if best contour not available
+  can-reconstruct top.json bottom.json output.obj --top-profile ellipse --bottom-profile ellipse
 
   # Use measured points for both profiles
   can-reconstruct top.json bottom.json can.stl --top-profile measured --bottom-profile measured
 
-  # Custom wall thickness and height with mixed profiles
-  can-reconstruct top.json bottom.json can.obj --top-profile ellipse --bottom-profile ellipse --wall-thickness 0.15 --height 120
+  # Custom wall thickness and height with best contour
+  can-reconstruct top.json bottom.json can.obj --top-profile best_contour --bottom-profile best_contour --wall-thickness 0.15 --height 120
 
-  # Batch reconstruction from analysis directories
-  can-reconstruct --batch out/60mm_top out/60mm_bottom --out-dir models/ --top-profile ellipse --bottom-profile circle
+  # Batch reconstruction from analysis directories using best contour
+  can-reconstruct --batch out/60mm_top out/60mm_bottom --out-dir models/ --top-profile best_contour --bottom-profile best_contour
         """,
     )
 
@@ -39,15 +42,15 @@ Examples:
     profile_group = parser.add_argument_group("Profile Selection")
     profile_group.add_argument(
         "--top-profile",
-        choices=["circle", "ellipse", "measured"],
-        default="ellipse",
-        help="Profile type for top rim (default: ellipse)",
+        choices=["circle", "ellipse", "measured", "best_contour"],
+        default="best_contour",
+        help="Profile type for top rim (default: best_contour)",
     )
     profile_group.add_argument(
         "--bottom-profile",
-        choices=["circle", "ellipse", "measured"],
-        default="ellipse",
-        help="Profile type for bottom rim (default: ellipse)",
+        choices=["circle", "ellipse", "measured", "best_contour"],
+        default="best_contour",
+        help="Profile type for bottom rim (default: best_contour)",
     )
 
     # Batch processing
@@ -210,7 +213,7 @@ def reconstruct_single(top_json: str, bottom_json: str, output_file: str, args) 
             resolution=args.resolution,
             output_format=args.output_format,
             plot_profiles=args.plot_profiles,
-            align_profiles=args.align_profiles,  # ADD THIS LINE
+            align_profiles=args.align_profiles,
         )
 
         if not args.quiet:

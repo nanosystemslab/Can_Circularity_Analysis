@@ -32,6 +32,9 @@ Examples:
   # Use saved calibration for multiple images
   can-analyze image1.jpg --save-scale calibration.json --click-scale
   can-analyze image2.jpg image3.jpg --scale-from calibration.json
+
+  # Use broken circle detection for incomplete rims
+  can-analyze image.jpg --method broken_circle --fit-best-contour
         """,
     )
 
@@ -78,9 +81,14 @@ Examples:
     detect_group = parser.add_argument_group("Detection Method")
     detect_group.add_argument(
         "--method",
-        choices=["binary", "canny"],
+        choices=["binary", "canny", "broken_circle"],
         default="binary",
-        help="Rim detection method (default: binary)",
+        help="Rim detection method (default: binary). Use 'broken_circle' for incomplete rims.",
+    )
+    detect_group.add_argument(
+        "--disable-broken-circle-fallback",
+        action="store_true",
+        help="Disable automatic broken circle fallback for canny method",
     )
 
     # Binary segmentation parameters
@@ -133,6 +141,24 @@ Examples:
         action="store_true",
         help="Also fit ellipse and calculate ellipticity metrics",
     )
+    output_group.add_argument(
+        "--fit-best-contour", action="store_true", help="Fit smooth contour that follows actual rim shape"
+    )
+    output_group.add_argument(
+        "--best-contour-method",
+        choices=["smooth", "fourier", "adaptive"],
+        default="adaptive",
+        help="Method for best contour fitting (default: adaptive)",
+    )
+    output_group.add_argument(
+        "--smoothing-factor",
+        type=float,
+        default=0.1,
+        help="Smoothing factor for adaptive contour (0.0=raw data, 1.0=very smooth)",
+    )
+    output_group.add_argument(
+        "--num-harmonics", type=int, default=10, help="Number of harmonics for Fourier contour fitting (default: 10)"
+    )
     output_group.add_argument("--quiet", action="store_true", help="Suppress progress output, only show final summary")
 
     return parser
@@ -156,6 +182,12 @@ def validate_arguments(args) -> None:
         for img in missing_images:
             print(f"  {img}")
         sys.exit(1)
+
+    # Handle broken circle fallback setting
+    if args.disable_broken_circle_fallback:
+        args.use_broken_circle = False
+    else:
+        args.use_broken_circle = True
 
 
 def analyze_single_image(image_path: str, args) -> dict:
@@ -187,6 +219,11 @@ def analyze_single_image(image_path: str, args) -> dict:
             "no_overlay": args.no_overlay,
             "save_debug": args.save_debug,
             "fit_ellipse": args.fit_ellipse,
+            "fit_best_contour": args.fit_best_contour,
+            "best_contour_method": args.best_contour_method,
+            "smoothing_factor": args.smoothing_factor,
+            "num_harmonics": args.num_harmonics,
+            "use_broken_circle": args.use_broken_circle,
         }
 
         # Analyze image
@@ -234,6 +271,19 @@ def print_summary(all_results: list[dict], args) -> None:
             std_diam = np.std(diameters_mm)
             print(f"  Mean diameter: {mean_diam:.2f} ± {std_diam:.2f} mm")
             print(f"  Range: {min(diameters_mm):.2f} - {max(diameters_mm):.2f} mm")
+
+        # Print best contour statistics if available
+        best_contour_variations = [
+            r.get("best_contour", {}).get("radius_variation")
+            for r in all_results
+            if not r.get("error") and r.get("best_contour", {}).get("radius_variation") is not None
+        ]
+
+        if best_contour_variations:
+            import numpy as np
+
+            mean_var = np.mean(best_contour_variations)
+            print(f"  Mean shape variation: {mean_var:.4f}")
 
 
 def main():

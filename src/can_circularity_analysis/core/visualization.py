@@ -15,6 +15,7 @@ def create_analysis_overlay(
     radius: float,
     points: np.ndarray,
     ellipse_result: dict[str, Any] | None,
+    best_contour_result: dict[str, Any] | None,
     scale_metadata: dict[str, Any] | None,
     offset: tuple[int, int],
     output_dir: str,
@@ -29,6 +30,7 @@ def create_analysis_overlay(
         center_x, center_y, radius: Circle parameters
         points: Rim points
         ellipse_result: Ellipse fitting results
+        best_contour_result: Best contour fitting results
         scale_metadata: Scale/calibration information
         offset: Crop offset
         output_dir: Output directory
@@ -73,6 +75,11 @@ def create_analysis_overlay(
             2,
         )
 
+    # Draw best contour if available
+    if best_contour_result and "contour" in best_contour_result:
+        best_contour = best_contour_result["contour"]
+        cv2.drawContours(overlay, [best_contour], -1, (0, 255, 255), 2)  # Cyan color
+
     # Draw scale line if available
     draw_scale_reference(overlay, scale_metadata, offset)
 
@@ -80,23 +87,33 @@ def create_analysis_overlay(
     diameter_px = 2.0 * radius
     mm_per_pixel = kwargs.get("mm_per_pixel")
 
+    label_lines = []
     if mm_per_pixel:
         diameter_mm = diameter_px * mm_per_pixel
-        label = f"Diam: {diameter_mm:.2f} mm"
+        label_lines.append(f"Circle: {diameter_mm:.2f} mm")
     else:
-        label = f"Diam: {diameter_px:.0f} px"
+        label_lines.append(f"Circle: {diameter_px:.0f} px")
 
     if ellipse_result and ellipse_result.get("ellipticity"):
-        label += f"  e={ellipse_result['ellipticity']:.3f}"
+        label_lines.append(f"Ellipse: e={ellipse_result['ellipticity']:.3f}")
+
+    if best_contour_result and best_contour_result.get("method"):
+        method = best_contour_result["method"]
+        if "radius_variation" in best_contour_result:
+            variation = best_contour_result["radius_variation"]
+            label_lines.append(f"Best ({method}): var={variation:.3f}")
+        else:
+            label_lines.append(f"Best: {method}")
 
     # Draw text with outline for visibility
     font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.8
+    font_scale = 0.7
     thickness = 2
-    text_pos = (12, 28)
 
-    cv2.putText(overlay, label, text_pos, font, font_scale, (0, 0, 0), thickness + 1, cv2.LINE_AA)
-    cv2.putText(overlay, label, text_pos, font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    for i, label in enumerate(label_lines):
+        text_pos = (12, 28 + i * 25)
+        cv2.putText(overlay, label, text_pos, font, font_scale, (0, 0, 0), thickness + 1, cv2.LINE_AA)
+        cv2.putText(overlay, label, text_pos, font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
 
     # Save overlay
     overlay_path = os.path.join(output_dir, f"{stem}_overlay.png")
